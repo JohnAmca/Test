@@ -1,0 +1,41 @@
+import fitz  # PyMuPDF
+import os
+
+def pdf_to_zoomed_png(pdf_path, output_folder, zoom=2.0):
+    """
+    PDF sayfalarını büyüterek PNG olarak kaydeder
+    
+    Args:
+        pdf_path (str): PDF dosya yolu
+        output_folder (str): Çıktı klasörü
+        zoom (float): Büyütme oranı (2.0 = %200)
+    """
+    
+    # Çıktı klasörünü oluştur
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    
+    # PDF'i aç
+    doc = fitz.open(pdf_path)
+    
+    for page_num in range(len(doc)):
+        # Sayfayı al
+        page = doc.load_page(page_num)
+        
+        # Matris oluştur (zoom için)
+        mat = fitz.Matrix(zoom, zoom)
+        
+        # Sayfayı pixmap'e dönüştür
+        pix = page.get_pixmap(matrix=mat)
+        
+        # PNG olarak kaydet
+        output_path = os.path.join(output_folder, f"page_{page_num + 1}_zoomed.png")
+        pix.save(output_path)
+        
+        print(f"Sayfa {page_num + 1} kaydedildi: {output_path}")
+    
+    doc.close()
+    print("İşlem tamamlandı!")
+
+# Kullanım örneği
+pdf_to_zoomed_png("input.pdf", "output_images", zoom=2.0)

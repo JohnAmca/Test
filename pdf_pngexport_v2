@@ -1,0 +1,187 @@
+import fitz  # PyMuPDF
+import os
+import glob
+from datetime import datetime
+
+def advanced_process_all_pdfs(input_folder, output_base_folder, zoom=2.0, 
+                             quality=100, process_subfolders=False,
+                             create_separate_folders=True, 
+                             output_filename_pattern="{pdf_name}_S{page_num}"):
+    """
+    Gelişmiş PDF işleme fonksiyonu
+    
+    Args:
+        input_folder (str): Giriş klasörü
+        output_base_folder (str): Ana çıktı klasörü
+        zoom (float): Büyütme oranı (2.0 = %200)
+        quality (int): Çıktı kalitesi (1-100)
+        process_subfolders (bool): Alt klasörleri de işle
+        create_separate_folders (bool): Her PDF için ayrı klasör oluştur
+        output_filename_pattern (str): Çıktı dosya adı patterni
+    """
+    
+    # PDF dosyalarını bul (alt klasörler dahil)
+    pattern = os.path.join(input_folder, "**/*.pdf") if process_subfolders else os.path.join(input_folder, "*.pdf")
+    pdf_files = glob.glob(pattern, recursive=process_subfolders)
+    
+    if not pdf_files:
+        print("PDF dosyası bulunamadı!")
+        return
+    
+    print(f"📁 Toplam bulunan PDF dosyaları: {len(pdf_files)}")
+    print(f"📂 Ayrı klasör oluşturma: {'AÇIK' if create_separate_folders else 'KAPALI'}")
+    print("=" * 60)
+    
+    for pdf_path in pdf_files:
+        try:
+            pdf_filename = os.path.basename(pdf_path)
+            pdf_name_without_ext = os.path.splitext(pdf_filename)[0]
+            
+            # Çıktı klasörü yolunu belirle
+            if create_separate_folders:
+                # Her PDF için ayrı klasör
+                if process_subfolders:
+                    relative_path = os.path.relpath(os.path.dirname(pdf_path), input_folder)
+                    if relative_path == ".":
+                        output_folder = os.path.join(output_base_folder, pdf_name_without_ext)
+                    else:
+                        output_folder = os.path.join(output_base_folder, relative_path, pdf_name_without_ext)
+                else:
+                    output_folder = os.path.join(output_base_folder, pdf_name_without_ext)
+            else:
+                # Tüm PNG'leri tek klasöre kaydet
+                if process_subfolders:
+                    relative_path = os.path.relpath(os.path.dirname(pdf_path), input_folder)
+                    if relative_path == ".":
+                        output_folder = output_base_folder
+                    else:
+                        output_folder = os.path.join(output_base_folder, relative_path)
+                else:
+                    output_folder = output_base_folder
+            
+            # Klasörü oluştur
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+                print(f"📁 Klasör oluşturuldu: {output_folder}")
+            
+            print(f"\n📄 İşleniyor: {pdf_filename}")
+            process_single_pdf_advanced(
+                pdf_path, output_folder, pdf_name_without_ext, 
+                zoom, quality, output_filename_pattern
+            )
+            
+        except Exception as e:
+            print(f"❌ Hata: {pdf_filename} - {str(e)}")
+
+def process_single_pdf_advanced(pdf_path, output_folder, pdf_name, zoom=2.0, 
+                               quality=100, filename_pattern="{pdf_name}_S{page_num}"):
+    """
+    Gelişmiş tek PDF işleme
+    """
+    doc = fitz.open(pdf_path)
+    total_pages = len(doc)
+    
+    print(f"   📄 Sayfa sayısı: {total_pages}")
+    print(f"   🔍 Büyütme oranı: %{zoom * 100}")
+    
+    start_time = datetime.now()
+    
+    for page_num in range(total_pages):
+        page = doc.load_page(page_num)
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat)
+        
+        # Dosya adını pattern'e göre oluştur
+        output_filename = filename_pattern.format(
+            pdf_name=pdf_name,
+            page_num=page_num + 1,
+            page_num_padded=f"{page_num + 1:03d}",
+            timestamp=datetime.now().strftime("%Y%m%d_%H%M%S")
+        ) + ".png"
+        
+        output_path = os.path.join(output_folder, output_filename)
+        
+        pix.save(output_path)
+        
+        # Her 10 sayfada bir veya son sayfada ilerleme raporu
+        if (page_num + 1) % 10 == 0 or (page_num + 1) == total_pages:
+            print(f"   ✓ Sayfa {page_num + 1}/{total_pages} - {output_filename}")
+    
+    doc.close()
+    
+    elapsed_time = (datetime.now() - start_time).total_seconds()
+    print(f"   ✅ Tamamlandı - {elapsed_time:.1f} saniye")
+
+def main():
+    """
+    Ana fonksiyon - kullanıcı etkileşimi için
+    """
+    # Çalışma klasörünü al
+    current_folder = os.getcwd()
+    output_folder = os.path.join(current_folder, "PNG_Output")
+    
+    print("=" * 60)
+    print("📷 PDF to PNG Dönüştürücü - Gelişmiş Sürüm")
+    print("=" * 60)
+    print(f"📁 Giriş klasörü: {current_folder}")
+    print(f"📂 Çıktı klasörü: {output_folder}")
+    print("=" * 60)
+    
+    # Ana çıktı klasörünü oluştur
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print("📁 Ana çıktı klasörü oluşturuldu.")
+    
+    # Tüm PDF'leri işle (ayrı klasörler AÇIK)
+    advanced_process_all_pdfs(
+        input_folder=current_folder,
+        output_base_folder=output_folder,
+        zoom=2.0,                    # %200 büyütme
+        quality=95,                  # PNG kalitesi
+        process_subfolders=False,    # Alt klasörleri işleme
+        create_separate_folders=True # Her PDF için ayrı klasör
+    )
+
+# Alternatif: Hızlı başlangıç fonksiyonları
+def quick_convert_with_folders():
+    """Hızlı dönüştürme - ayrı klasörlerle"""
+    advanced_process_all_pdfs(
+        input_folder=os.getcwd(),
+        output_base_folder=os.path.join(os.getcwd(), "PNG_Output"),
+        zoom=2.0,
+        create_separate_folders=True
+    )
+
+def quick_convert_single_folder():
+    """Hızlı dönüştürme - tek klasöre"""
+    advanced_process_all_pdfs(
+        input_folder=os.getcwd(),
+        output_base_folder=os.path.join(os.getcwd(), "All_PNGs"),
+        zoom=2.0,
+        create_separate_folders=False
+    )
+
+def custom_convert(input_path, output_path, separate_folders=True, zoom=2.0):
+    """Özel dönüştürme"""
+    advanced_process_all_pdfs(
+        input_folder=input_path,
+        output_base_folder=output_path,
+        zoom=zoom,
+        create_separate_folders=separate_folders
+    )
+
+if __name__ == "__main__":
+    # Ana fonksiyonu çalıştır
+    main()
+    
+    # Veya hızlı fonksiyonlardan birini kullan:
+    # quick_convert_with_folders()    # Ayrı klasörlerle
+    # quick_convert_single_folder()   # Tek klasöre
+    
+    # Veya özel ayarlarla:
+    # custom_convert(
+    #     input_path="C:/path/to/pdfs",
+    #     output_path="C:/path/to/output", 
+    #     separate_folders=False,  # True for separate folders
+    #     zoom=1.5                 # %150 büyütme
+    # )

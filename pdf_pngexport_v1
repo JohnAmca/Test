@@ -1,0 +1,124 @@
+import fitz  # PyMuPDF
+import os
+import glob
+
+def process_all_pdfs_in_folder(folder_path, output_base_folder, zoom=2.0):
+    """
+    Klasördeki tüm PDF dosyalarını işler ve sayfalarını PNG olarak kaydeder
+    
+    Args:
+        folder_path (str): PDF'lerin bulunduğu klasör yolu
+        output_base_folder (str): Ana çıktı klasörü yolu
+        zoom (float): Büyütme oranı (2.0 = %200)
+    """
+    
+    # PDF dosyalarını bul
+    pdf_files = glob.glob(os.path.join(folder_path, "*.pdf"))
+    
+    if not pdf_files:
+        print("Klasörde PDF dosyası bulunamadı!")
+        return
+    
+    print(f"Bulunan PDF dosyaları: {len(pdf_files)}")
+    
+    for pdf_path in pdf_files:
+        # PDF dosya adını al (uzantı olmadan)
+        pdf_filename = os.path.basename(pdf_path)
+        pdf_name_without_ext = os.path.splitext(pdf_filename)[0]
+        
+        # Her PDF için ayrı çıktı klasörü oluştur
+        output_folder = os.path.join(output_base_folder, pdf_name_without_ext)
+        
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+        
+        print(f"\nİşleniyor: {pdf_filename}")
+        print(f"Çıktı klasörü: {output_folder}")
+        
+        # PDF'i işle
+        process_single_pdf(pdf_path, output_folder, pdf_name_without_ext, zoom)
+
+def process_single_pdf(pdf_path, output_folder, pdf_name, zoom=2.0):
+    """
+    Tek bir PDF dosyasını işler
+    
+    Args:
+        pdf_path (str): PDF dosya yolu
+        output_folder (str): Çıktı klasörü
+        pdf_name (str): PDF dosya adı (uzantısız)
+        zoom (float): Büyütme oranı
+    """
+    
+    try:
+        # PDF'i aç
+        doc = fitz.open(pdf_path)
+        total_pages = len(doc)
+        
+        print(f"Toplam sayfa: {total_pages}")
+        
+        for page_num in range(total_pages):
+            # Sayfayı al
+            page = doc.load_page(page_num)
+            
+            # Matris oluştur (zoom için)
+            mat = fitz.Matrix(zoom, zoom)
+            
+            # Sayfayı pixmap'e dönüştür
+            pix = page.get_pixmap(matrix=mat)
+            
+            # Dosya adını oluştur: pdf_adi_S1.png, pdf_adi_S2.png, ...
+            output_filename = f"{pdf_name}_S{page_num + 1}.png"
+            output_path = os.path.join(output_folder, output_filename)
+            
+            # PNG olarak kaydet
+            pix.save(output_path)
+            
+            print(f"  ✓ Sayfa {page_num + 1} kaydedildi: {output_filename}")
+        
+        doc.close()
+        print(f"✓ {pdf_name} işlemi tamamlandı!")
+        
+    except Exception as e:
+        print(f"❌ Hata oluştu ({pdf_name}): {str(e)}")
+
+def main():
+    """
+    Ana fonksiyon - kullanıcı etkileşimi için
+    """
+    # Çalışma klasörünü al
+    current_folder = os.getcwd()
+    output_folder = os.path.join(current_folder, "PNG_Output")
+    
+    print("=" * 50)
+    print("PDF to PNG Dönüştürücü")
+    print("=" * 50)
+    print(f"Çalışma klasörü: {current_folder}")
+    print(f"Çıktı klasörü: {output_folder}")
+    print("=" * 50)
+    
+    # Ana çıktı klasörünü oluştur
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print("Çıktı klasörü oluşturuldu.")
+    
+    # Tüm PDF'leri işle
+    process_all_pdfs_in_folder(current_folder, output_folder, zoom=2.0)
+    
+    print("\n" + "=" * 50)
+    print("Tüm işlemler tamamlandı!")
+    print("=" * 50)
+
+# Alternatif: Belirli bir klasör için
+def process_specific_folder(input_folder, output_base_folder, zoom=2.0):
+    """
+    Belirli bir klasördeki PDF'leri işler
+    """
+    print(f"İşlem klasörü: {input_folder}")
+    process_all_pdfs_in_folder(input_folder, output_base_folder, zoom)
+
+if __name__ == "__main__":
+    # Otomatik olarak çalışma klasöründeki tüm PDF'leri işle
+    main()
+    
+    # Veya belirli bir klasör belirtmek için:
+    # process_specific_folder("C:/path/to/your/pdf/folder", "C:/path/to/output", zoom=2.0)

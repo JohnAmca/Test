@@ -1,0 +1,280 @@
+import fitz  # PyMuPDF
+import os
+import glob
+import sys
+
+def get_user_input():
+    """
+    Kullanıcıdan tüm ayarları interaktif olarak alır
+    """
+    print("=" * 60)
+    print("📷 PDF to PNG Dönüştürücü - Interaktif Sürüm")
+    print("=" * 60)
+    
+    # 1. Giriş klasörü
+    print("\n1. 📁 PDF'lerin bulunduğu klasörü seçin:")
+    print("   [1] Mevcut klasör")
+    print("   [2] Başka bir klasör")
+    
+    input_choice = input("   Seçiminiz (1-2): ").strip()
+    
+    if input_choice == "2":
+        input_folder = input("   📂 Klasör yolunu girin: ").strip()
+        if not os.path.exists(input_folder):
+            print("   ❌ Klasör bulunamadı! Mevcut klasör kullanılacak.")
+            input_folder = os.getcwd()
+    else:
+        input_folder = os.getcwd()
+    
+    print(f"   ✅ Giriş klasörü: {input_folder}")
+    
+    # 2. Çıktı klasörü
+    print("\n2. 📂 Çıktı klasörünü seçin:")
+    print("   [1] Otomatik oluştur (PNG_Output)")
+    print("   [2] Özel klasör")
+    
+    output_choice = input("   Seçiminiz (1-2): ").strip()
+    
+    if output_choice == "2":
+        output_folder = input("   📂 Çıktı klasör yolunu girin: ").strip()
+    else:
+        output_folder = os.path.join(input_folder, "PNG_Output")
+    
+    print(f"   ✅ Çıktı klasörü: {output_folder}")
+    
+    # 3. Kalite seviyesi
+    print("\n3. 🎚️ Kalite seviyesini seçin:")
+    print("   [1] Düşük (150 DPI) - Hızlı")
+    print("   [2] Orta (200 DPI) - Standart")
+    print("   [3] Yüksek (300 DPI) - Önerilen ✓")
+    print("   [4] Ultra (400 DPI) - Kaliteli")
+    print("   [5] Profesyonel (600 DPI) - En İyi")
+    
+    quality_choice = input("   Seçiminiz (1-5): ").strip()
+    
+    quality_map = {
+        "1": {"dpi": 150, "name": "low"},
+        "2": {"dpi": 200, "name": "medium"},
+        "3": {"dpi": 300, "name": "high"},
+        "4": {"dpi": 400, "name": "ultra"},
+        "5": {"dpi": 600, "name": "professional"}
+    }
+    
+    quality_settings = quality_map.get(quality_choice, quality_map["3"])
+    print(f"   ✅ Kalite: {quality_settings['name']} ({quality_settings['dpi']} DPI)")
+    
+    # 4. Büyütme oranı
+    print("\n4. 🔍 Büyütme oranını seçin:")
+    print("   [1] %100 (Orijinal)")
+    print("   [2] %150")
+    print("   [3] %200 - Önerilen ✓")
+    print("   [4] %250")
+    print("   [5] %300")
+    print("   [6] Özel oran")
+    
+    zoom_choice = input("   Seçiminiz (1-6): ").strip()
+    
+    zoom_map = {
+        "1": 1.0,
+        "2": 1.5,
+        "3": 2.0,
+        "4": 2.5,
+        "5": 3.0
+    }
+    
+    if zoom_choice == "6":
+        try:
+            custom_zoom = float(input("   Özel büyütme oranı girin (% cinsinden, örn: 175): ").strip())
+            zoom_level = custom_zoom / 100
+        except:
+            print("   ❌ Geçersiz giriş! %200 kullanılacak.")
+            zoom_level = 2.0
+    else:
+        zoom_level = zoom_map.get(zoom_choice, 2.0)
+    
+    print(f"   ✅ Büyütme: %{zoom_level * 100}")
+    
+    # 5. Klasör yapısı
+    print("\n5. 📂 Klasör yapısını seçin:")
+    print("   [1] Her PDF için ayrı klasör oluştur ✓")
+    print("   [2] Tüm PNG'leri tek klasöre kaydet")
+    
+    folder_choice = input("   Seçiminiz (1-2): ").strip()
+    create_separate_folders = (folder_choice != "2")
+    
+    print(f"   ✅ Ayrı klasörler: {'Evet' if create_separate_folders else 'Hayır'}")
+    
+    # 6. Onay
+    print("\n" + "=" * 60)
+    print("📋 Seçilen Ayarlar:")
+    print(f"   📁 Giriş: {input_folder}")
+    print(f"   📂 Çıktı: {output_folder}")
+    print(f"   🎚️ Kalite: {quality_settings['name']} ({quality_settings['dpi']} DPI)")
+    print(f"   🔍 Büyütme: %{zoom_level * 100}")
+    print(f"   📂 Ayrı klasörler: {'Evet' if create_separate_folders else 'Hayır'}")
+    print("=" * 60)
+    
+    confirm = input("\n⏯️  İşlemi başlatmak için [E] tuşuna basın, çıkmak için başka bir tuşa basın: ").strip().lower()
+    
+    if confirm != 'e':
+        print("❌ İşlem iptal edildi.")
+        sys.exit()
+    
+    return {
+        "input_folder": input_folder,
+        "output_folder": output_folder,
+        "dpi": quality_settings["dpi"],
+        "zoom": zoom_level,
+        "create_separate_folders": create_separate_folders,
+        "quality_name": quality_settings["name"]
+    }
+
+def convert_pdfs_with_settings(settings):
+    """
+    Kullanıcı ayarlarıyla PDF'leri dönüştürür
+    """
+    input_folder = settings["input_folder"]
+    output_folder = settings["output_folder"]
+    dpi = settings["dpi"]
+    zoom = settings["zoom"]
+    create_separate_folders = settings["create_separate_folders"]
+    quality_name = settings["quality_name"]
+    
+    # PDF dosyalarını bul
+    pdf_files = glob.glob(os.path.join(input_folder, "*.pdf"))
+    
+    if not pdf_files:
+        print("❌ PDF dosyası bulunamadı!")
+        return
+    
+    print(f"\n📊 İşlem başlıyor...")
+    print(f"   📄 Toplam PDF: {len(pdf_files)}")
+    print(f"   🎯 Kalite: {dpi} DPI")
+    print(f"   🔍 Büyütme: %{zoom * 100}")
+    print("=" * 50)
+    
+    # Çıktı klasörünü oluştur
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"📁 Çıktı klasörü oluşturuldu: {output_folder}")
+    
+    total_pages_converted = 0
+    
+    for pdf_path in pdf_files:
+        try:
+            pdf_filename = os.path.basename(pdf_path)
+            pdf_name = os.path.splitext(pdf_filename)[0]
+            
+            # Çıktı klasörünü belirle
+            if create_separate_folders:
+                current_output_folder = os.path.join(output_folder, pdf_name)
+            else:
+                current_output_folder = output_folder
+            
+            if not os.path.exists(current_output_folder):
+                os.makedirs(current_output_folder)
+            
+            print(f"\n📄 İşleniyor: {pdf_filename}")
+            
+            # PDF'i aç ve işle
+            doc = fitz.open(pdf_path)
+            
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                
+                # Yüksek kalite matrisi
+                mat = fitz.Matrix(zoom * (dpi / 72), zoom * (dpi / 72))
+                
+                # Pixmap oluştur
+                pix = page.get_pixmap(
+                    matrix=mat,
+                    alpha=False,
+                    colorspace="rgb",
+                    annots=True
+                )
+                
+                # Dosya adını oluştur
+                output_filename = f"{pdf_name}_S{page_num + 1}_{quality_name.upper()}.png"
+                output_path = os.path.join(current_output_folder, output_filename)
+                
+                # Kaydet
+                pix.save(output_path)
+                total_pages_converted += 1
+                
+                # İlerleme göstergesi
+                if (page_num + 1) % 5 == 0:
+                    print(f"   ✅ Sayfa {page_num + 1}: {pix.width}×{pix.height} px")
+            
+            doc.close()
+            print(f"   🎉 {pdf_name} tamamlandı")
+            
+        except Exception as e:
+            print(f"❌ Hata ({pdf_filename}): {str(e)}")
+    
+    # Sonuç raporu
+    print("\n" + "=" * 60)
+    print("📊 İŞLEM TAMAMLANDI!")
+    print("=" * 60)
+    print(f"   📄 İşlenen PDF sayısı: {len(pdf_files)}")
+    print(f"   🖼️  Dönüştürülen sayfa: {total_pages_converted}")
+    print(f"   📂 Çıktı klasörü: {output_folder}")
+    print(f"   🎯 Kalite: {dpi} DPI")
+    print(f"   🔍 Büyütme: %{zoom * 100}")
+    print("=" * 60)
+    
+    # Çıktı klasörünü aç
+    try:
+        if sys.platform == "win32":
+            os.startfile(output_folder)
+        elif sys.platform == "darwin":
+            os.system(f"open '{output_folder}'")
+        else:
+            os.system(f"xdg-open '{output_folder}'")
+        print("📂 Çıktı klasörü açıldı.")
+    except:
+        print("ℹ️ Çıktı klasörüne el ile gidebilirsiniz.")
+
+def main():
+    """
+    Ana program
+    """
+    try:
+        # Kullanıcı ayarlarını al
+        settings = get_user_input()
+        
+        # Dönüştürme işlemini başlat
+        convert_pdfs_with_settings(settings)
+        
+        # Programı kapat
+        input("\n⏹️  Çıkmak için Enter tuşuna basın...")
+        
+    except KeyboardInterrupt:
+        print("\n❌ İşlem kullanıcı tarafından iptal edildi.")
+    except Exception as e:
+        print(f"\n❌ Beklenmeyen hata: {str(e)}")
+        input("Çıkmak için Enter tuşuna basın...")
+
+# Basit mod için alternatif fonksiyon
+def quick_start():
+    """
+    Hızlı başlangıç - tüm ayarlar otomatik
+    """
+    print("🚀 Hızlı başlangıç modu...")
+    
+    settings = {
+        "input_folder": os.getcwd(),
+        "output_folder": os.path.join(os.getcwd(), "PNG_Output"),
+        "dpi": 300,
+        "zoom": 2.0,
+        "create_separate_folders": True,
+        "quality_name": "high"
+    }
+    
+    convert_pdfs_with_settings(settings)
+
+if __name__ == "__main__":
+    # Ana programı çalıştır
+    main()
+    
+    # Veya hızlı başlangıç için:
+    # quick_start()

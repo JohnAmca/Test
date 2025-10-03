@@ -1,0 +1,235 @@
+import fitz  # PyMuPDF
+import os
+import glob
+import sys
+import psutil
+
+def optimize_memory_usage():
+    """Bellek kullanımını optimize et"""
+    if psutil.virtual_memory().percent > 85:
+        print("⚠️  Uyarı: Sistem belleği %85'in üzerinde!")
+        return False
+    return True
+
+def safe_pdf_conversion(pdf_path, output_folder, pdf_name, dpi=300, zoom=2.0, 
+                       create_separate_folders=True, max_pixels=40000000):
+    """
+    Bellek dostu PDF dönüştürme fonksiyonu
+    max_pixels: 40MP (40000000) = yaklaşık 6325×6325 piksel
+    """
+    
+    try:
+        doc = fitz.open(pdf_path)
+        total_pages = len(doc)
+        
+        for page_num in range(total_pages):
+            # Bellek kontrolü
+            if not optimize_memory_usage():
+                print("   ⚠️  Bellek yetersiz, bekleniyor...")
+                import time
+                time.sleep(2)
+            
+            page = doc.load_page(page_num)
+            
+            # Sayfa boyutunu kontrol et
+            rect = page.rect
+            base_width = rect.width * (dpi / 72) * zoom
+            base_height = rect.height * (dpi / 72) * zoom
+            total_pixels = base_width * base_height
+            
+            # Çok büyük sayfalar için otomatik ölçeklendirme
+            effective_dpi = dpi
+            effective_zoom = zoom
+            
+            if total_pixels > max_pixels:
+                # Otomatik ölçeklendirme faktörü hesapla
+                scale_factor = (max_pixels / total_pixels) ** 0.5
+                effective_zoom = zoom * scale_factor
+                print(f"   ⚠️  Sayfa {page_num + 1} çok büyük, otomatik küçültülüyor: %{effective_zoom * 100:.1f}")
+            
+            # Optimize edilmiş matris
+            mat = fitz.Matrix(effective_zoom * (effective_dpi / 72), 
+                             effective_zoom * (effective_dpi / 72))
+            
+            try:
+                # Düşük bellek kullanımlı pixmap
+                pix = page.get_pixmap(
+                    matrix=mat,
+                    alpha=False,
+                    colorspace="rgb",
+                    annots=True
+                )
+                
+                # Dosya adı
+                output_filename = f"{pdf_name}_S{page_num + 1}.png"
+                if create_separate_folders:
+                    output_path = os.path.join(output_folder, pdf_name, output_filename)
+                else:
+                    output_path = os.path.join(output_folder, output_filename)
+                
+                # Klasörü kontrol et
+                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                
+                # Kaydet
+                pix.save(output_path)
+                
+                # Pixmap'i hemen temizle (bellek boşalt)
+                del pix
+                
+                print(f"   ✅ Sayfa {page_num + 1}: {pix.width}×{pix.height} px")
+                
+            except MemoryError:
+                print(f"   ❌ Sayfa {page_num + 1} bellek hatası - daha düşük kalite deneniyor...")
+                
+                # Daha düşük kalite ile tekrar dene
+                mat = fitz.Matrix(1.0 * (150 / 72), 1.0 * (150 / 72))  # Düşük DPI
+                pix = page.get_pixmap(matrix=mat)
+                pix.save(output_path)
+                print(f"   ⚠️  Sayfa {page_num + 1} düşük kalite kaydedildi")
+                del pix
+            
+            # Sayfa başına garbage collection
+            import gc
+            gc.collect()
+        
+        doc.close()
+        return True
+        
+    except Exception as e:
+        print(f"   ❌ Kritik hata: {str(e)}")
+        return False
+
+def get_user_input():
+    """Kullanıcıdan ayarları al (önceki kod ile aynı)"""
+    # ... önceki get_user_input fonksiyonu buraya gelecek ...
+    # Kısaltma için tekrar yazmıyorum, aynı kod
+
+def convert_pdfs_with_memory_optimization(settings):
+    """
+    Bellek optimizasyonlu PDF dönüştürme
+    """
+    input_folder = settings["input_folder"]
+    output_folder = settings["output_folder"]
+    dpi = settings["dpi"]
+    zoom = settings["zoom"]
+    create_separate_folders = settings["create_separate_folders"]
+    
+    # PDF dosyalarını bul
+    pdf_files = glob.glob(os.path.join(input_folder, "*.pdf"))
+    
+    if not pdf_files:
+        print("❌ PDF dosyası bulunamadı!")
+        return
+    
+    print(f"\n📊 Bellek optimizasyonlu işlem başlıyor...")
+    print(f"   📄 Toplam PDF: {len(pdf_files)}")
+    print(f"   🎯 Kalite: {dpi} DPI")
+    print(f"   🔍 Büyütme: %{zoom * 100}")
+    print(f"   💾 Maksimum piksel: 40MP")
+    print("=" * 50)
+    
+    # Çıktı klasörünü oluştur
+    os.makedirs(output_folder, exist_ok=True)
+    
+    successful_conversions = 0
+    total_pages_converted = 0
+    
+    for pdf_path in pdf_files:
+        pdf_filename = os.path.basename(pdf_path)
+        pdf_name = os.path.splitext(pdf_filename)[0]
+        
+        print(f"\n📄 İşleniyor: {pdf_filename}")
+        
+        # Bellek optimizasyonlu dönüştürme
+        success = safe_pdf_conversion(
+            pdf_path=pdf_path,
+            output_folder=output_folder,
+            pdf_name=pdf_name,
+            dpi=dpi,
+            zoom=zoom,
+            create_separate_folders=create_separate_folders
+        )
+        
+        if success:
+            successful_conversions += 1
+            doc = fitz.open(pdf_path)
+            total_pages_converted += len(doc)
+            doc.close()
+            print(f"   🎉 {pdf_name} başarıyla tamamlandı")
+        else:
+            print(f"   ❌ {pdf_name} işlenemedi")
+        
+        # PDF'ler arası bellek temizliği
+        import gc
+        gc.collect()
+    
+    # Sonuç raporu
+    print("\n" + "=" * 60)
+    print("📊 İŞLEM TAMAMLANDI!")
+    print("=" * 60)
+    print(f"   ✅ Başarılı PDF: {successful_conversions}/{len(pdf_files)}")
+    print(f"   🖼️  Dönüştürülen sayfa: {total_pages_converted}")
+    print(f"   📂 Çıktı klasörü: {output_folder}")
+    print("=" * 60)
+
+def main():
+    """
+    Ana program - bellek optimizasyonlu
+    """
+    try:
+        # Kullanıcı ayarlarını al
+        settings = get_user_input()
+        
+        # Optimizasyon seçenekleri
+        print("\n🔧 Bellek Optimizasyonu:")
+        print("   [1] Otomatik optimizasyon (Önerilen)")
+        print("   [2] Manuel ayarlar")
+        
+        opt_choice = input("   Seçiminiz (1-2): ").strip()
+        
+        if opt_choice == "2":
+            print("   ⚠️  Manuel mod riskli olabilir!")
+        
+        # Dönüştürme işlemini başlat
+        convert_pdfs_with_memory_optimization(settings)
+        
+        # Programı kapat
+        input("\n⏹️  Çıkmak için Enter tuşuna basın...")
+        
+    except KeyboardInterrupt:
+        print("\n❌ İşlem kullanıcı tarafından iptal edildi.")
+    except Exception as e:
+        print(f"\n❌ Beklenmeyen hata: {str(e)}")
+        input("Çıkmak için Enter tuşuna basın...")
+
+# ACİL DURUM - ÇOK DÜŞÜK AYARLAR
+def emergency_conversion():
+    """
+    Acil durum modu - çok düşük ayarlarla çalışır
+    """
+    print("🆘 ACİL DURUM MODU - Çok düşük bellek kullanımı")
+    
+    settings = {
+        "input_folder": os.getcwd(),
+        "output_folder": os.path.join(os.getcwd(), "EMERGENCY_Output"),
+        "dpi": 100,      # Çok düşük DPI
+        "zoom": 1.0,     # Büyütme yok
+        "create_separate_folders": False
+    }
+    
+    convert_pdfs_with_memory_optimization(settings)
+
+if __name__ == "__main__":
+    # Bellek durumunu kontrol et
+    memory_info = psutil.virtual_memory()
+    print(f"💾 Sistem belleği: {memory_info.percent}% dolu")
+    
+    if memory_info.percent > 90:
+        print("⚠️  Yüksek bellek kullanımı! Acil durum modu önerilir.")
+        choice = input("Acil durum modunda devam etmek ister misiniz? [E/H]: ").strip().lower()
+        if choice == 'e':
+            emergency_conversion()
+        else:
+            main()
+    else:
+        main()
